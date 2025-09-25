@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>GRT GOT TALENT Scoreboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: url('bg.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .container {
+            min-height: 100vh;
+            background-color: rgba(10, 25, 47, 0.7); /* Dark blue with transparency */
+        }
+        .header {
+            background-color: #0a192f; /* Dark blue matching the new theme */
+            color: white;
+        }
+        .logo {
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .score-display-card {
+            background-color: #172a45; /* Slightly lighter blue */
+            color: white;
+        }
+        .admin-input-card {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Sparkle effect */
+        .sparkle-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 10;
+        }
+        .sparkle {
+            position: absolute;
+            background: rgb(165, 243, 252); /* Light blue sparkle */
+            border-radius: 50%;
+            animation: sparkle-effect 2s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes sparkle-effect {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0);
+                opacity: 0;
+            }
+        }
+
+        /* Cracking effect */
+        .cracking-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 11;
+        }
+        .cracking-particle {
+            position: absolute;
+            background: rgba(59, 130, 246, 0.5); /* Blue cracking effect */
+            border-radius: 50%;
+            animation: cracking-effect 1s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes cracking-effect {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        /* Rocket effect */
+        .rocket-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 12;
+        }
+        .rocket-particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: white;
+            border-radius: 50%;
+            animation: rocket-launch 1s forwards cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .burst-particle {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            opacity: 0;
+            animation: burst-out 0.8s ease-out forwards;
+        }
+
+        @keyframes rocket-launch {
+            from {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(-100vh) scale(0);
+                opacity: 0;
+            }
+        }
+
+        @keyframes burst-out {
+            from {
+                transform: scale(0) translate(0, 0);
+                opacity: 1;
+            }
+            to {
+                transform: scale(1) translate(var(--dx), var(--dy));
+                opacity: 0;
+            }
+        }
+    </style>
+    <script>
+        // Data and UI elements
+        const teamsData = { teams: [] };
+        let adminPanel;
+        let scoreboard;
+        let scoreboardList;
+        let teamNamesSection;
+        let scoresSection;
+        let loadingIndicator;
+        let revealIndex = 0; // New variable to track the reveal position
+
+        // Function to save data to localStorage
+        function saveData() {
+            try {
+                localStorage.setItem('grtGotTalentData', JSON.stringify(teamsData.teams));
+                console.log("Data saved to localStorage successfully.");
+            } catch (e) {
+                console.error("Error saving data to localStorage: ", e);
+            }
+        }
+
+        // Function to load data from localStorage
+        function loadData() {
+            try {
+                const storedData = localStorage.getItem('grtGotTalentData');
+                if (storedData) {
+                    teamsData.teams = JSON.parse(storedData);
+                    console.log("Data loaded from localStorage.");
+                } else {
+                    console.log("No data found in localStorage. Starting with empty sheet.");
+                }
+            } catch (e) {
+                console.error("Error loading data from localStorage: ", e);
+            }
+        }
+
+        // Renders the input fields in the admin panel based on the current data
+        function renderAdminPanel() {
+            // Render team name inputs
+            const teamNameInputsContainer = document.getElementById('team-name-inputs');
+            if (teamNameInputsContainer) {
+                teamNameInputsContainer.innerHTML = '';
+                teamsData.teams.forEach((team, teamIndex) => {
+                    const teamNameInput = document.createElement('div');
+                    teamNameInput.innerHTML = `
+                        <input type="text" value="${team.name}" data-team-index="${teamIndex}"
+                            class="team-name-input w-full p-2 bg-blue-900 text-white placeholder-white rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                            placeholder="Team Name">
+                    `;
+                    teamNameInputsContainer.appendChild(teamNameInput);
+                });
+            }
+
+            // Render scores inputs
+            const scoresFormContainer = document.getElementById('scores-form');
+            if (scoresFormContainer) {
+                scoresFormContainer.innerHTML = '';
+                teamsData.teams.forEach((team, teamIndex) => {
+                    const teamRow = document.createElement('div');
+                    teamRow.className = 'score-row flex flex-col md:flex-row items-center gap-2 p-4 border-b border-blue-500 last:border-b-0';
+
+                    // This span will display the team name on the scoring sheet
+                    let html = `
+                        <div class="flex-shrink-0 w-full md:w-1/5 mb-2 md:mb-0">
+                            <span class="team-name-display text-lg font-bold w-full p-2 rounded-md">${team.name}</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2 w-full md:w-4/5">
+                    `;
+                    for (let i = 0; i < 7; i++) {
+                        html += `
+                            <input type="number" value="${team.scores[i] || ''}" data-team-index="${teamIndex}" data-round-index="${i}"
+                                class="score-input p-2 w-full bg-blue-900 text-white text-center rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                                placeholder="R${i + 1}">
+                        `;
+                    }
+                    html += '</div>';
+
+                    teamRow.innerHTML = html;
+                    scoresFormContainer.appendChild(teamRow);
+                });
+            }
+        }
+
+        // Renders the scoreboard display with a delay
+        function renderScoreboard() {
+            if (!scoreboardList) return;
+
+            // Clear the scoreboard before starting the reveal
+            scoreboardList.innerHTML = ''; 
+
+            // Sort teams by total score in descending order
+            const sortedTeams = [...teamsData.teams].sort((a, b) => b.total - a.total);
+
+            if (sortedTeams.length === 0) {
+                scoreboardList.innerHTML = '<p class="text-center text-white text-xl">No teams added yet. Please use the Admin Panel to add teams and scores.</p>';
+                return;
+            }
+
+            // Reset the reveal index
+            revealIndex = sortedTeams.length - 1; 
+
+            // Start the recursive function to reveal cards one by one
+            revealCardWithDelay(sortedTeams);
+        }
+
+        function revealCardWithDelay(teams) {
+            if (revealIndex < 0) {
+                return;
+            }
+
+            const team = teams[revealIndex];
+            const rank = revealIndex + 1;
+            const card = document.createElement('div');
+            card.className = 'score-display-card p-4 rounded-lg shadow-xl mb-4 opacity-0 transform translate-y-8 transition-all duration-500 ease-out';
+            
+            let podiumColor = '';
+            if (rank === 1) {
+                podiumColor = 'bg-yellow-400 text-black';
+            } else if (rank === 2) {
+                podiumColor = 'bg-gray-300 text-black';
+            } else if (rank === 3) {
+                podiumColor = 'bg-orange-400 text-black';
+            }
+
+            card.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${podiumColor} border-2 border-white">
+                            ${rank}
+                        </div>
+                        <h3 class="text-2xl font-bold">${team.name}</h3>
+                    </div>
+                    <div class="text-4xl font-extrabold">${team.total}</div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 mt-4 gap-2 text-center text-sm">
+                    ${team.scores.map((score, i) => `<div class="p-2 rounded-md bg-cyan-700">R${i + 1}: ${score}</div>`).join('')}
+                </div>
+            `;
+            
+            // Insert the new card at the beginning of the list to show them in descending order (1st place at the top)
+            scoreboardList.prepend(card);
+            
+            // Trigger the animation by changing the opacity and transform
+            setTimeout(() => {
+                card.classList.remove('opacity-0', 'translate-y-8');
+            }, 50); // Small delay to allow the card to be added to the DOM before the animation starts
+
+            revealIndex--; // Decrement to reveal the next team
+            
+            // Set a timeout to call the function again for the next team
+            setTimeout(() => revealCardWithDelay(teams), 500); // Adjust delay here (in milliseconds)
+        }
+
+        function updateTeamNames() {
+            // Get the latest team names from the form
+            const newTeams = Array.from(document.querySelectorAll('.team-name-input')).map(input => ({
+                name: input.value,
+                // Keep existing scores if the team already exists; otherwise give 7 zeros
+                scores: teamsData.teams.find(t => t.name === input.value)?.scores || [0, 0, 0, 0, 0, 0, 0],
+                total: teamsData.teams.find(t => t.name === input.value)?.total || 0,
+            })).filter(team => team.name.trim() !== '');
+            teamsData.teams = newTeams;
+        }
+
+        function updateScores() {
+            document.querySelectorAll('.score-row').forEach(row => {
+                const teamName = row.querySelector('.team-name-display').textContent;
+                const teamIndex = teamsData.teams.findIndex(t => t.name === teamName);
+
+                if (teamIndex !== -1) {
+                    const scores = [];
+                    row.querySelectorAll('.score-input').forEach(scoreInput => {
+                        scores.push(parseInt(scoreInput.value) || 0);
+                    });
+                    // Ensure scores length is 7 (if user removed some inputs for some reason)
+                    while (scores.length < 7) scores.push(0);
+                    teamsData.teams[teamIndex].scores = scores;
+                    teamsData.teams[teamIndex].total = scores.reduce((sum, s) => sum + s, 0);
+                }
+            });
+        }
+
+        // Functions for effects
+        function createSparkles() {
+            const sparkleContainer = document.getElementById('sparkle-container');
+            if (!sparkleContainer) return;
+
+            const numSparkles = 50;
+            for (let i = 0; i < numSparkles; i++) {
+                const sparkle = document.createElement('div');
+                sparkle.className = 'sparkle';
+                sparkle.style.left = `${Math.random() * 100}vw`;
+                sparkle.style.top = `${Math.random() * 100}vh`;
+                sparkle.style.width = `${Math.random() * 5 + 2}px`;
+                sparkle.style.height = sparkle.style.width;
+                sparkle.style.animationDelay = `${Math.random() * 1}s`;
+                sparkleContainer.appendChild(sparkle);
+            }
+            setTimeout(() => {
+                sparkleContainer.innerHTML = '';
+            }, 2000);
+        }
+
+        function createCrackingEffect() {
+            const crackingContainer = document.getElementById('cracking-container');
+            if (!crackingContainer) return;
+
+            const numParticles = 20;
+            for (let i = 0; i < numParticles; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'cracking-particle';
+                const size = Math.random() * 10 + 5;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `${Math.random() * 100}vh`;
+                particle.style.animationDelay = `${Math.random() * 0.5}s`;
+                crackingContainer.appendChild(particle);
+            }
+            setTimeout(() => {
+                crackingContainer.innerHTML = '';
+            }, 1000);
+        }
+
+        function createRocketCrackerEffect() {
+            const rocketContainer = document.getElementById('rocket-container');
+            if (!rocketContainer) return;
+
+            const numRockets = 5;
+            const colors = ['#A5F3FC', '#FDE68A', '#93C5FD', '#FCA5A5', '#C4B5FD'];
+
+            for (let i = 0; i < numRockets; i++) {
+                const rocket = document.createElement('div');
+                rocket.className = 'rocket-particle';
+                const startX = Math.random() * 80 + 10;
+                rocket.style.left = `${startX}vw`;
+                rocket.style.bottom = `-50px`; // Start off-screen
+                rocket.style.animationDelay = `${Math.random() * 0.5}s`;
+                rocketContainer.appendChild(rocket);
+
+                const burstTime = Math.random() * 500 + 500;
+                const burstY = Math.random() * 50 + 20;
+
+                setTimeout(() => {
+                    // Create burst particles
+                    const numBurstParticles = 50;
+                    const explosionX = rocket.offsetLeft;
+                    const explosionY = rocket.offsetTop;
+
+                    for (let j = 0; j < numBurstParticles; j++) {
+                        const burst = document.createElement('div');
+                        burst.className = 'burst-particle';
+                        burst.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                        burst.style.left = `${explosionX}px`;
+                        burst.style.top = `${explosionY}px`;
+                        const angle = Math.random() * 2 * Math.PI;
+                        const velocity = Math.random() * 150 + 50;
+                        const dx = Math.cos(angle) * velocity;
+                        const dy = Math.sin(angle) * velocity;
+                        burst.style.setProperty('--dx', `${dx}px`);
+                        burst.style.setProperty('--dy', `${dy}px`);
+                        burst.style.animationDelay = `${Math.random() * 0.2}s`;
+                        rocketContainer.appendChild(burst);
+                    }
+                    rocket.remove();
+                }, burstTime);
+            }
+
+            setTimeout(() => {
+                rocketContainer.innerHTML = '';
+            }, 2000);
+        }
+
+        function playMusic() {
+            const audio = document.getElementById('talent-music');
+            if (audio) {
+                audio.play().catch(e => console.error("Error playing audio:", e));
+            }
+        }
+
+        function stopMusic() {
+            const audio = document.getElementById('talent-music');
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0; // Rewind to the beginning
+            }
+        }
+
+        // Event listeners
+        window.onload = function () {
+            // Get references to all the UI elements after the page is loaded
+            adminPanel = document.getElementById('admin-panel');
+            scoreboard = document.getElementById('scoreboard');
+            scoreboardList = document.getElementById('scoreboard-list');
+            teamNamesSection = document.getElementById('team-names-section');
+            scoresSection = document.getElementById('scores-section');
+            loadingIndicator = document.getElementById('loading');
+
+            loadingIndicator.classList.add('hidden');
+            loadData();
+            if (teamsData.teams.length > 0) {
+                teamNamesSection.classList.add('hidden');
+                scoresSection.classList.remove('hidden');
+            } else {
+                teamNamesSection.classList.remove('hidden');
+                scoresSection.classList.add('hidden');
+            }
+            renderAdminPanel();
+            renderScoreboard();
+        };
+
+        document.addEventListener('click', (event) => {
+            if (event.target.id === 'add-team-btn') {
+                teamsData.teams.push({ name: '', scores: [0, 0, 0, 0, 0, 0, 0], total: 0 });
+                renderAdminPanel();
+            } else if (event.target.id === 'save-teams-btn') {
+                updateTeamNames();
+                saveData();
+                renderAdminPanel(); // Rerender to show the updated team names
+                renderScoreboard();
+                teamNamesSection.classList.add('hidden');
+                scoresSection.classList.remove('hidden');
+            } else if (event.target.id === 'save-scores-btn') {
+                updateScores();
+                saveData();
+                renderScoreboard();
+            } else if (event.target.id === 'show-scoreboard-btn') {
+                // Trigger effects before showing scoreboard
+                playMusic();
+                createSparkles();
+                createCrackingEffect();
+                createRocketCrackerEffect();
+
+                if (adminPanel) adminPanel.classList.add('hidden');
+                if (scoreboard) scoreboard.classList.remove('hidden');
+                renderScoreboard();
+            } else if (event.target.id === 'show-admin-btn') {
+                stopMusic(); // Stop the music when going back to admin panel
+                if (scoreboard) scoreboard.classList.add('hidden');
+                if (adminPanel) adminPanel.classList.remove('hidden');
+                renderAdminPanel();
+            } else if (event.target.id === 'refresh-btn') {
+                teamsData.teams = [];
+                saveData();
+                renderAdminPanel();
+                renderScoreboard();
+                teamNamesSection.classList.remove('hidden');
+                scoresSection.classList.add('hidden');
+            }
+        });
+    </script>
+</head>
+<body class="p-4 md:p-8 bg-gray-900 text-white flex items-start justify-center">
+
+    <audio id="talent-music" src="talent_music.mp3"></audio>
+
+    <div id="sparkle-container" class="sparkle-container"></div>
+    <div id="cracking-container" class="cracking-container"></div>
+    <div id="rocket-container" class="rocket-container"></div>
+
+    <div id="main-container" class="container w-full max-w-7xl mx-auto rounded-xl shadow-2xl overflow-hidden backdrop-blur-sm">
+
+        <header class="header p-6 flex flex-col sm:flex-row items-center justify-between rounded-t-xl relative overflow-hidden">
+            <img src="image_99b4dd.png" alt="GRT Star Logo" class="logo h-20 w-auto mb-4 sm:mb-0">
+            <h1 class="text-4xl sm:text-6xl font-extrabold text-white uppercase text-center tracking-wide drop-shadow-lg">
+                GRT GOT TALENT
+            </h1>
+            <img src="image_99b4e2.png" alt="GRT Jewellers Logo" class="logo h-20 w-auto">
+        </header>
+
+        <div id="loading" class="text-center p-8 text-xl font-bold">
+            <div class="flex items-center justify-center space-x-2 animate-pulse">
+                <div class="w-4 h-4 bg-cyan-400 rounded-full"></div>
+                <div class="w-4 h-4 bg-cyan-400 rounded-full"></div>
+                <div class="w-4 h-4 bg-cyan-400 rounded-full"></div>
+            </div>
+            <p class="mt-4">Loading data...</p>
+        </div>
+
+        <main class="p-6 md:p-10">
+
+            <div class="text-center text-sm font-light mb-4 text-gray-300 hidden md:block" id="user-id-display"></div>
+
+            <section id="admin-panel" class="admin-input-card p-6 rounded-xl shadow-xl">
+                <h2 class="text-3xl font-bold mb-6 text-center text-white drop-shadow-lg">Admin Panel</h2>
+
+                <div id="team-names-section">
+                    <h3 class="text-xl font-bold mb-4">Enter Team Names</h3>
+                    <div id="team-name-inputs" class="space-y-4">
+                        </div>
+                    <div class="flex flex-col sm:flex-row gap-4 mt-6 justify-center">
+                        <button id="add-team-btn"
+                            class="bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-cyan-700 transition duration-300 transform hover:scale-105">
+                            Add New Team
+                        </button>
+                        <button id="save-teams-btn"
+                            class="bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-cyan-700 transition duration-300 transform hover:scale-105">
+                            Save Team Names
+                        </button>
+                    </div>
+                </div>
+
+                <div id="scores-section" class="hidden">
+                    <h3 class="text-xl font-bold mb-4">Enter Scores</h3>
+                    <div id="scores-form" class="space-y-4">
+                        </div>
+                    <div class="flex flex-col sm:flex-row gap-4 mt-6 justify-center">
+                        <button id="save-scores-btn"
+                            class="bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-cyan-700 transition duration-300 transform hover:scale-105">
+                            Save Scores
+                        </button>
+                        <button id="show-scoreboard-btn"
+                            class="bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-cyan-700 transition duration-300 transform hover:scale-105">
+                            Show Scoreboard
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8">
+                    <button id="refresh-btn"
+                            class="bg-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-red-700 transition duration-300 transform hover:scale-105">
+                            Refresh Data
+                    </button>
+                </div>
+            </section>
+
+            <section id="scoreboard" class="hidden">
+                <h2 class="text-3xl font-bold mb-6 text-center text-white drop-shadow-lg">Scoreboard</h2>
+
+                <div id="scoreboard-list" class="space-y-6">
+                    </div>
+
+                <div class="text-center mt-8">
+                    <button id="show-admin-btn"
+                        class="bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-cyan-700 transition duration-300 transform hover:scale-105">
+                        Back to Admin
+                    </button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+</body>
+</html>

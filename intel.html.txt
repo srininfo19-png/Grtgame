@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRT GOT TALENT Scoreboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: url('https://raw.githubusercontent.com/google/gemini-micro-web-app/main/images/grt-got-talent-bg.jpg'); /* Using a placeholder URL for the background */
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .container {
+            min-height: 100vh;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        .header {
+            background-color: #5b21b6; /* Purple color matching the image */
+            color: white;
+        }
+        .logo {
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .score-display-card {
+            background-color: #4c1d95; /* Darker purple */
+            color: white;
+        }
+        .admin-input-card {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId;
+
+        const teamsData = { teams: [] };
+        const mainContainer = document.getElementById('main-container');
+        const adminPanel = document.getElementById('admin-panel');
+        const scoreboard = document.getElementById('scoreboard');
+        const adminForm = document.getElementById('admin-form');
+        const scoreboardList = document.getElementById('scoreboard-list');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const loadingIndicator = document.getElementById('loading');
+        
+        // This function handles the initial setup and authentication
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser.uid;
+                userIdDisplay.textContent = `User ID: ${userId}`;
+                console.log('Firebase initialized and user authenticated:', userId);
+                
+                // Set up the real-time listener for the scores
+                setupRealtimeListener();
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                loadingIndicator.textContent = "Error loading data. Check console for details.";
+            }
+        }
+        
+        function setupRealtimeListener() {
+            // Path to the public scores document
+            const scoresDocRef = doc(db, `artifacts/${appId}/public/data/scores`, 'scores-data');
+
+            onSnapshot(scoresDocRef, (docSnap) => {
+                loadingIndicator.classList.add('hidden');
+                if (docSnap.exists()) {
+                    teamsData.teams = docSnap.data().teams;
+                    renderAdminPanel();
+                    renderScoreboard();
+                    console.log("Data loaded from Firestore.");
+                } else {
+                    console.log("No data found in Firestore. Starting with empty sheet.");
+                    teamsData.teams = [];
+                    renderAdminPanel();
+                }
+            }, (error) => {
+                console.error("Error fetching real-time data:", error);
+                loadingIndicator.textContent = "Error fetching real-time data.";
+            });
+        }
+        
+        // Function to save the scores to the database
+        async function saveScoresToDB() {
+            const scoresDocRef = doc(db, `artifacts/${appId}/public/data/scores`, 'scores-data');
+            try {
+                await setDoc(scoresDocRef, { teams: teamsData.teams });
+                console.log("Scores saved to Firestore successfully.");
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+        
+        // Renders the input fields in the admin panel based on the current data
+        function renderAdminPanel() {
+            adminForm.innerHTML = '';
+            teamsData.teams.forEach((team, teamIndex) => {
+                const teamRow = document.createElement('div');
+                teamRow.className = 'flex flex-col md:flex-row items-center gap-2 p-4 border-b border-purple-500 last:border-b-0';
+                
+                let html = `
+                    <div class="flex-shrink-0 w-full md:w-1/5 mb-2 md:mb-0">
+                        <input type="text" value="${team.name}" data-team-index="${teamIndex}" data-input-type="name"
+                            class="team-name-input w-full p-2 bg-purple-700 text-white placeholder-white rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            placeholder="Team Name">
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 w-full md:w-4/5">
+                `;
+                for (let i = 0; i < 6; i++) {
+                    html += `
+                        <input type="number" value="${team.scores[i] || ''}" data-team-index="${teamIndex}" data-input-type="score" data-round-index="${i}"
+                            class="score-input p-2 w-full bg-purple-700 text-white text-center rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            placeholder="R${i + 1}">
+                    `;
+                }
+                html += '</div>';
+
+                teamRow.innerHTML = html;
+                adminForm.appendChild(teamRow);
+            });
+        }
+        
+        // Updates the teamsData object from the form and saves to DB
+        function updateTeamsFromForm() {
+            teamsData.teams = [];
+            document.querySelectorAll('.team-name-input').forEach((nameInput, teamIndex) => {
+                const teamName = nameInput.value;
+                const scores = [];
+                document.querySelectorAll(`input[data-team-index="${teamIndex}"][data-input-type="score"]`).forEach(scoreInput => {
+                    scores.push(parseInt(scoreInput.value) || 0);
+                });
+                if (teamName.trim() !== '') {
+                    teamsData.teams.push({
+                        name: teamName,
+                        scores: scores,
+                        total: scores.reduce((sum, score) => sum + score, 0)
+                    });
+                }
+            });
+            saveScoresToDB();
+        }
+
+        // Renders the scoreboard display
+        function renderScoreboard() {
+            scoreboardList.innerHTML = '';
+            // Sort teams by total score in descending order
+            const sortedTeams = [...teamsData.teams].sort((a, b) => b.total - a.total);
+            
+            if (sortedTeams.length === 0) {
+                scoreboardList.innerHTML = '<p class="text-center text-white text-xl">No teams added yet. Please use the Admin Panel to add teams and scores.</p>';
+            } else {
+                sortedTeams.forEach((team, index) => {
+                    const rank = index + 1;
+                    const card = document.createElement('div');
+                    card.className = 'score-display-card p-4 rounded-lg shadow-xl mb-4 transform transition duration-300 hover:scale-105';
+                    let podiumColor = '';
+                    if (rank === 1) {
+                        podiumColor = 'bg-yellow-400 text-black';
+                    } else if (rank === 2) {
+                        podiumColor = 'bg-gray-300 text-black';
+                    } else if (rank === 3) {
+                        podiumColor = 'bg-orange-400 text-black';
+                    }
+
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${podiumColor} border-2 border-white">
+                                    ${rank}
+                                </div>
+                                <h3 class="text-2xl font-bold">${team.name}</h3>
+                            </div>
+                            <div class="text-4xl font-extrabold">${team.total}</div>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 mt-4 gap-2 text-center text-sm">
+                            ${team.scores.map((score, i) => `<div class="p-2 rounded-md bg-purple-600">R${i + 1}: ${score}</div>`).join('')}
+                        </div>
+                    `;
+                    scoreboardList.appendChild(card);
+                });
+            }
+        }
+
+        // Add event listeners
+        window.addEventListener('load', () => {
+            initializeFirebase();
+        });
+
+        document.getElementById('add-team-btn').addEventListener('click', () => {
+            teamsData.teams.push({ name: '', scores: [0, 0, 0, 0, 0, 0], total: 0 });
+            renderAdminPanel();
+        });
+
+        document.getElementById('show-scoreboard-btn').addEventListener('click', () => {
+            updateTeamsFromForm();
+            adminPanel.classList.add('hidden');
+            scoreboard.classList.remove('hidden');
+        });
+
+        document.getElementById('show-admin-btn').addEventListener('click', () => {
+            scoreboard.classList.add('hidden');
+            adminPanel.classList.remove('hidden');
+        });
+
+        // Event delegation for input changes in the admin form
+        adminForm.addEventListener('input', (e) => {
+            const input = e.target;
+            const teamIndex = parseInt(input.getAttribute('data-team-index'));
+            const inputType = input.getAttribute('data-input-type');
+
+            if (inputType === 'name') {
+                teamsData.teams[teamIndex].name = input.value;
+            } else if (inputType === 'score') {
+                const roundIndex = parseInt(input.getAttribute('data-round-index'));
+                const score = parseInt(input.value) || 0;
+                teamsData.teams[teamIndex].scores[roundIndex] = score;
+            }
+
+            // Recalculate totals and save to DB
+            teamsData.teams[teamIndex].total = teamsData.teams[teamIndex].scores.reduce((sum, s) => sum + s, 0);
+            saveScoresToDB();
+        });
+    </script>
+</head>
+<body class="p-4 md:p-8 bg-gray-900 text-white flex items-start justify-center">
+
+    <div id="main-container" class="container w-full max-w-7xl mx-auto rounded-xl shadow-2xl overflow-hidden backdrop-blur-sm">
+        
+        <!-- Header Section -->
+        <header class="header p-6 flex flex-col sm:flex-row items-center justify-between rounded-t-xl relative overflow-hidden">
+            <img src="https://raw.githubusercontent.com/google/gemini-micro-web-app/main/images/grt-star-logo.png" alt="GRT Star Logo" class="logo h-20 w-auto mb-4 sm:mb-0">
+            <h1 class="text-4xl sm:text-6xl font-extrabold text-white uppercase text-center tracking-wide drop-shadow-lg">
+                GRT GOT TALENT
+            </h1>
+            <img src="https://raw.githubusercontent.com/google/gemini-micro-web-app/main/images/grt-jewellers-logo.png" alt="GRT Jewellers Logo" class="logo h-20 w-auto">
+        </header>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="text-center p-8 text-xl font-bold">
+            <div class="flex items-center justify-center space-x-2 animate-pulse">
+                <div class="w-4 h-4 bg-purple-400 rounded-full"></div>
+                <div class="w-4 h-4 bg-purple-400 rounded-full"></div>
+                <div class="w-4 h-4 bg-purple-400 rounded-full"></div>
+            </div>
+            <p class="mt-4">Loading data...</p>
+        </div>
+
+        <!-- Main Content Section -->
+        <main class="p-6 md:p-10">
+            
+            <div class="text-center text-sm font-light mb-4 text-gray-300 hidden md:block" id="user-id-display"></div>
+
+            <!-- Admin Panel -->
+            <section id="admin-panel" class="admin-input-card p-6 rounded-xl shadow-xl">
+                <h2 class="text-3xl font-bold mb-6 text-center text-white drop-shadow-lg">Admin Panel</h2>
+
+                <div id="admin-form" class="space-y-4">
+                    <!-- Dynamic team input fields will be rendered here -->
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4 mt-6 justify-center">
+                    <button id="add-team-btn"
+                        class="bg-purple-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-purple-700 transition duration-300 transform hover:scale-105">
+                        Add New Team
+                    </button>
+                    <button id="show-scoreboard-btn"
+                        class="bg-purple-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-purple-700 transition duration-300 transform hover:scale-105">
+                        Show Scoreboard
+                    </button>
+                </div>
+            </section>
+            
+            <!-- Scoreboard -->
+            <section id="scoreboard" class="hidden">
+                <h2 class="text-3xl font-bold mb-6 text-center text-white drop-shadow-lg">Scoreboard</h2>
+                
+                <div id="scoreboard-list" class="space-y-6">
+                    <!-- Dynamic scoreboard cards will be rendered here -->
+                </div>
+
+                <div class="text-center mt-8">
+                    <button id="show-admin-btn"
+                        class="bg-purple-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-purple-700 transition duration-300 transform hover:scale-105">
+                        Back to Admin
+                    </button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+</body>
+</html>
